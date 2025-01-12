@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
 use curve25519_dalek::traits::Identity;
 use curve25519_dalek::RistrettoPoint;
@@ -145,7 +143,6 @@ fn intersection(p: &Point, metric: u32) -> Vec<Point> {
 
 pub struct Receiver {
     window: usize,                         // 窗口大小
-    n: u64,                                // 输出的大小
     pk: RistrettoPoint,                    // 公钥
     sk: Scalar,                            // 私钥
     _pre_data: Vec<Vec<(Scalar, Scalar)>>, // 预处理数据
@@ -175,7 +172,6 @@ impl Receiver {
 
         return Receiver {
             window: window as usize,
-            n: 1,
             pk,
             sk,
             _pre_data,
@@ -193,24 +189,19 @@ impl Receiver {
         return self.window;
     }
 
-    // 返回每维度的输出大小
-    pub fn get_output_size_per_dim(&self) -> u64 {
-        return self.n;
-    }
-
     // 刷新 Receiver 实例
     pub fn refresh(&mut self) {
         let mut rng = rand::thread_rng(); // 创建随机数生成器
         self._okvsgen.clear(); // 清空 okvs 生成器
         self._pre_data.clear(); // 清空预处理数据
         for _ in 0..DIM {
-            let mut pair = Vec::with_capacity(self.n as usize); // 为每一维度重新初始化预处理数据
-            for _ in 0..self.n {
+            let mut pair = Vec::with_capacity(self.window as usize); // 为每一维度重新初始化预处理数据
+            for _ in 0..self.window {
                 let tem = Scalar::random(&mut rng); // 随机生成数据
                 pair.push((tem, tem * self.sk)); // 存储数据和数据乘以私钥
             }
             self._pre_data.push(pair); // 更新预处理数据
-            self._okvsgen.push(okvs::OkvsGen::new(self.n)); // 更新 okvs 生成器
+            self._okvsgen.push(okvs::OkvsGen::new(self.window as u64)); // 更新 okvs 生成器
         }
     }
 
@@ -228,13 +219,10 @@ impl Receiver {
                 .iter()
                 .zip(self._pre_data[i].windows(self.window).step_by(self.window))
             {
-                let blk: [u64; 2] = block(pt, SIDE_LEN, R); // 计算块
-                let key: u64 = hash64(&blk); // 计算块的哈希值
-                                             // 遍历 [2R+1] 范围内的每个值
                 let min: u64 = pt[i] - R as u64;
                 for (j, pre_val) in pre_window.iter().enumerate() {
                     let key_ij = hash64(&(min + j as u64)); // 计算每个点的哈希值
-                    list.push((key ^ key_ij, *pre_val)); // 将键值对添加到列表中
+                    list.push((key_ij, *pre_val)); // 将键值对添加到列表中
                 }
             }
             result.push(self._okvsgen[i].encode(&list)); // 对每个维度的数据进行编码
@@ -292,7 +280,6 @@ impl Sender {
             // 生成coin
             let a = Scalar::random(&mut rng); // 随机生成一个 Scalar
             let b = Scalar::random(&mut rng); // 随机生成另一个 Scalar
-            let c = Scalar::random(&mut rng); // 随机生成第三个 Scalar
 
             // _coins.0=a,_coins.1=a*pk,_coins.2=b
             _coins.push((&a * RISTRETTO_BASEPOINT_TABLE, a * pk_rec, b)); // 将coin添加到向量中
@@ -340,31 +327,17 @@ impl Sender {
         pt: &Point,                      // 点
         index: usize,                    // 索引
     ) -> okvs::Encoding {
-        let mut blk: Point = [0u64; DIM]; // 初始化块
         let coin_window = &self._coins[index..index + self.window]; // 获取当前窗口的coin
         let mut uv: okvs::Encoding =
-            vec![(RistrettoPoint::identity(), RistrettoPoint::identity()); BLK_CELLS]; // 初始化结果编码
+            vec![(RistrettoPoint::identity(), RistrettoPoint::identity()); 1]; // 初始化结果编码
         let mut tem: okvs::PointPair; // 临时变量
-        let cel: [u64; 2] = cell(pt, SIDE_LEN); // 计算块的左下角坐标
 
         // 遍历每个可能的块
         // 因为在recv计算用的是对应Point的block, sender则不知道，到底是哪个block
         for (i, coins) in coin_window.iter().enumerate() {
-            // todo: 为什么这个更新？
-            for j in 0..DIM {
-                // 计算块的坐标
-                if (i >> j) & 1 == 1 {
-                    blk[j] = cel[j] - 1; // 更新块坐标
-                } else {
-                    blk[j] = cel[j]; // 使用原块坐标
-                }
-            }
-
-            let key = hash64(&blk); // 计算块的哈希值
-                                    // 遍历每个维度
             for j in 0..DIM {
                 let key_ij = hash64(&(pt[j] as u64)); // 计算每个点的哈希值
-                tem = okvs::okvs_decode(&encodings[j], key ^ key_ij); // 解码
+                tem = okvs::okvs_decode(&encodings[j], key_ij); // 解码
                 uv[i].0 += tem.0; // 更新结果
                 uv[i].1 += tem.1; // 更新结果
             }
@@ -374,47 +347,6 @@ impl Sender {
             uv[i].0 = coins.2 * uv[i].0 + coins.0; // 最终计算
             uv[i].1 = coins.2 * uv[i].1 + coins.1; // 最终计算
         }
-        return uv; // 返回编码结果
-    }
-
-    // 发送消息
-    pub fn msg(&mut self, encodings: &Vec<okvs::Encoding>, pt_set: &Vec<Point>) -> okvs::Encoding {
-        let mut blk: Point = [0u64; DIM]; // 初始化块
-        let mut uv: okvs::Encoding =
-            vec![(RistrettoPoint::identity(), RistrettoPoint::identity()); self.m as usize]; // 初始化结果编码
-        let mut tem: (RistrettoPoint, RistrettoPoint); // 临时变量
-                                                       // 遍历每个发送者的点 pt
-        for (ind, (pt, coin_window)) in pt_set
-            .iter()
-            .zip(self._coins.windows(self.window).step_by(self.window))
-            .enumerate()
-        {
-            let cel = cell(pt, SIDE_LEN); // 计算块的左下角坐标
-                                          // 遍历每个可能的块
-            for (i, coins) in coin_window.iter().enumerate() {
-                let uv_i = ind * self.window + i; // 计算结果索引
-                for j in 0..DIM {
-                    // 计算块的坐标
-                    if (i >> j) & 1 == 1 {
-                        blk[j] = cel[j] - 1; // 更新块坐标
-                    } else {
-                        blk[j] = cel[j]; // 使用原块坐标
-                    }
-                }
-                let key = hash64(&blk); // 计算块的哈希值
-                                        // 遍历每个维度
-                for j in 0..DIM {
-                    let key_ij = hash64(&(pt[j] as u64)); // 计算每个点的哈希值
-                    tem = okvs::okvs_decode(&encodings[j], key ^ key_ij); // 解码
-                    uv[uv_i].0 += tem.0; // 更新结果
-                    uv[uv_i].1 += tem.1; // 更新结果
-                }
-                // 完成计算
-                uv[uv_i].0 = coins.2 * uv[uv_i].0 + coins.0; // 最终计算
-                uv[uv_i].1 = coins.2 * uv[uv_i].1 + coins.1; // 最终计算
-            }
-        }
-        self._coins.clear(); // 清空coin向量
         return uv; // 返回编码结果
     }
 }

@@ -509,8 +509,8 @@ impl Sender {
                 }
             }
 
-            let key = hash64(&blk); // 计算块的哈希值
-                                    // 遍历每个维度
+            let key: u64 = hash64(&blk); // 计算块的哈希值
+                                         // 遍历每个维度
             for j in 0..DIM {
                 let key_ij = hash64(&(pt[j] as u64)); // 计算每个点的哈希值
                 tem = okvs::okvs_decode(&encodings[j], key ^ key_ij); // 解码
