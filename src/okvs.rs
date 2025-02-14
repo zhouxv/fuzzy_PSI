@@ -170,7 +170,12 @@ pub struct OkvsGen {
 impl OkvsGen {
     pub fn new(num_item: u64) -> Self {
         // 根据 n 和 epsilon 计算 m
-        let m: u64 = (num_item as f64 * (1.0 + EPSILON)).ceil() as u64;
+        let mut m: u64 = (num_item as f64 * (1.0 + EPSILON)).ceil() as u64;
+
+        if m < KAPPA {
+            m = (KAPPA as f64 * (1.0 + EPSILON)).ceil() as u64;
+        }
+
         // 随机生成 m 个随机 (Scalar, Scalar)
         let _data: Vec<(Scalar, Scalar)> = (0..m)
             // .map(|_| (Scalar::ZERO, Scalar::ZERO))

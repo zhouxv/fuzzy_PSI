@@ -37,9 +37,9 @@ codegen-units = 1
 debug = false
 overflow-checks = false
 
-[lib]
-name = "f_psi"
-path = "src/lib.rs"
+# [lib]
+# name = "f_psi"
+# path = "src/lib.rs"
 
 [[bin]]
 name = "f_psi"

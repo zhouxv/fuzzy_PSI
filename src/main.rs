@@ -1,58 +1,265 @@
-use f_psi::psi;
-use f_psi::psi_test;
-use rand::Rng;
+use core::time;
 use std::time::Instant;
+use std::{env, u128};
 
-// 随机采集num个点
-fn sample_test_data_points(num: usize) -> Vec<psi::Point> {
-    let mut rng = rand::thread_rng();
-    let mut points: Vec<psi::Point> = Vec::with_capacity(num);
-    for _ in 0..num {
-        let mut point: psi::Point = [0u64; psi::DIM];
-        for i in 0..psi::DIM {
-            point[i] = rng.gen_range(psi::SIDE_LEN..=(1 << 31));
+use f_psi::psi::{Point, DIM, R, SIDE_LEN};
+use f_psi::{protocol, psi_test};
+use rand::Rng;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    println!("程序名称+参数: {:?}", args);
+
+    let pro_type = args[1].parse::<usize>().unwrap_or(0);
+    let times = args[2].parse::<usize>().unwrap_or(50);
+
+    match pro_type {
+        0 => {
+            // 低维协议
+            test_all_low(times);
         }
-        points.push(point);
+        1 => {
+            // 1 vs 1
+            test_all_single(times);
+        }
+        _ => {}
     }
-    return points;
 }
 
-pub fn fuzzy_macthing_infinity(setting: bool) {
+pub fn test_all_single(times: usize) {
+    println!("D:{}, R:{}", DIM, R);
+    println!("-----------------无穷范数-------------------");
+
+    let mut a = 0;
+    let mut b = 0;
+    let mut c = 0;
+    for _ in 0..times {
+        let (d, e, f) = fuzzy_macthing_infinity(false);
+        println!("{} {} {}", d, e, f);
+        a = a + d;
+        b = b + e;
+        c = c + f;
+    }
+
+    println!(
+        "msg {} msg2 {} 总时间 {} μs",
+        a / times,
+        b / times,
+        c / times as u128
+    );
+
+    println!("------------------L1---------------------");
+    a = 0;
+    b = 0;
+    c = 0;
+    for _ in 0..times {
+        let (d, e, f) = fuzzy_macthing_lp(1, false);
+        println!("{} {} {}", d, e, f);
+        a = a + d;
+        b = b + e;
+        c = c + f;
+    }
+
+    println!(
+        "msg {} msg2 {} 总时间 {} μs",
+        a / times,
+        b / times,
+        c / times as u128
+    );
+
+    println!("------------------L2---------------------");
+
+    a = 0;
+    b = 0;
+    c = 0;
+    for _ in 0..times {
+        let (d, e, f) = fuzzy_macthing_lp(2, false);
+        println!("{} {} {}", d, e, f);
+        a = a + d;
+        b = b + e;
+        c = c + f;
+    }
+
+    println!(
+        "msg {} msg2 {} 总时间 {} μs",
+        a / times,
+        b / times,
+        c / times as u128
+    );
+}
+
+pub fn fuzzy_macthing_infinity(setting: bool) -> (usize, usize, u128) {
     let data_r = sample_test_data_points(1);
     let mut data_s = sample_test_data_points(1);
     if setting {
-        data_s[0][0] = data_r[0][0] - psi::R / 2;
-        data_s[0][1] = data_r[0][1] + psi::R / 2;
+        for i in 0..DIM {
+            data_s[0][i] = data_r[0][i] - R / 2;
+        }
     }
 
-    println!("r: {:?}, s: {:?}", data_r, data_s);
+    // println!("r: {:?}, s: {:?}", data_r, data_s);
 
-    let mut psi_rec = psi_test::Receiver::new(); // 创建Recv
-    let psi_sed = psi_test::Sender::new(psi_rec.publish_pk());
+    let mut psi_rec = psi_test::Receiver::new_single_lin(); // 创建Recv
+    let psi_sed = psi_test::Sender::new_single_lin(psi_rec.publish_pk());
 
-    let msg1 = psi_rec.msg(&data_r);
+    let now = Instant::now();
+
+    let msg1 = psi_rec.lin_single_msg(&data_r);
+    let msg1_com = bincode::serialize(&msg1).unwrap();
 
     let msg: Vec<(
         curve25519_dalek::RistrettoPoint,
         curve25519_dalek::RistrettoPoint,
-    )> = psi_sed.send_msg_single(&msg1, &data_s[0], 0); // 发送单个消息
+    )> = psi_sed.lin_send_msg_single(&msg1, &data_s[0], 0); // 发送单个消息
 
-    let res = psi_rec.post_process(&msg);
-    println!("res: {:?}", res);
+    //
+    let msg_com = bincode::serialize(&msg).unwrap();
+
+    let res = psi_rec.lin_single_post_process(&msg);
+
+    //
+    let end = now.elapsed();
+
+    print!("res: {:?} ", res);
+
+    (msg1_com.len(), msg_com.len(), end.as_micros())
 }
 
-fn main() {
-    println!("1vs1 fuzzymacth l∞()--------------------------------------------");
-    fuzzy_macthing_infinity(true);
+pub fn fuzzy_macthing_lp(metric: usize, setting: bool) -> (usize, usize, u128) {
+    let data_r = sample_test_data_points(1);
+    let mut data_s = sample_test_data_points(1);
 
-    fuzzy_macthing_infinity(false);
+    if setting {
+        for i in 0..DIM {
+            data_s[0][i] = data_r[0][i] - 1;
+        }
+    }
 
-    // println!("protocol_apart()--------------------------------------");
-    // protocol_apart();
+    // println!("r: {:?}, s: {:?}", data_r, data_s);
 
-    // println!("protocol_lp()-----------------------------------------");
-    // protocol_lp();
+    let mut psi_rec = psi_test::Receiver::new_single_lp(); // 创建Recv
+    let psi_sed = psi_test::Sender::new_single_lp(1, psi_rec.publish_pk(), metric);
 
-    // println!("psi_lp()----------------------------------------------");
-    // psi_lp();
+    let now = Instant::now();
+    let msg1 = psi_rec.lp_single_msg(&data_r, metric);
+    let msg1_com = bincode::serialize(&msg1).unwrap();
+
+    let msg = psi_sed.lp_send_msg_single(&msg1, &data_s[0], 0); // 发送单个消息
+    let msg_com = bincode::serialize(&msg).unwrap();
+
+    let res = psi_rec.lp_single_post_process(&msg);
+    let end = now.elapsed();
+
+    print!("res: {:?} ", res);
+
+    (msg1_com.len(), msg_com.len(), end.as_micros())
+}
+
+pub fn test_all_low(times: usize) {
+    lin_low(2048, 1048576, times);
+
+    // println!("---------------------------------------");
+
+    // lp_low(16, 16, 1, times);
+
+    // println!("---------------------------------------");
+
+    // lp_low(16, 16, 2, times);
+
+    // println!("---------------------------------------");
+
+    // lin_low(256, 256, times);
+
+    // println!("---------------------------------------");
+
+    // lp_low(256, 256, 1, times);
+
+    // println!("---------------------------------------");
+
+    // lp_low(256, 256, 2, times);
+}
+
+fn lin_low(n_r: usize, n_s: usize, times: usize) {
+    println!("n: {}, m: {}, d:{}, R:{}", n_r, n_s, DIM, R);
+
+    let mut a = 0;
+    let mut b = 0;
+    let mut c = 0;
+
+    for _ in 0..times {
+        let data_r = sample_test_data_points(n_r);
+        let mut data_s = sample_test_data_points(n_s);
+
+        for i in 0..DIM {
+            data_s[9][i] = data_r[7][i] - R / 2;
+            data_s[11][i] = data_r[7][i] + R;
+        }
+
+        let (psi_rcr, psi_sdr) = protocol::setup(n_r, n_s, true, 0);
+
+        let (d, e, f) = protocol::run_standard_apart(psi_rcr, psi_sdr, data_r, data_s);
+
+        println!("msg1 {} msg2 {} times {}", d, e, f);
+        a = a + d;
+        b = b + e;
+        c = c + f;
+    }
+
+    println!(
+        "{} 字节 {} 字节 {} 微秒",
+        a / times,
+        b / times,
+        c / times as u128
+    );
+}
+
+fn lp_low(n_r: usize, n_s: usize, metric: usize, times: usize) {
+    println!(
+        "n: {}, m: {}, D:{}, R:{}, metric:{}",
+        n_r, n_s, DIM, R, metric
+    );
+
+    let mut a = 0;
+    let mut b = 0;
+    let mut c = 0;
+
+    for _ in 0..times {
+        let data_r = sample_test_data_points(n_r);
+        let mut data_s = sample_test_data_points(n_s);
+
+        for i in 0..DIM {
+            data_s[9][i] = data_r[7][i] - R / 2;
+            data_s[11][i] = data_r[7][i] + R;
+        }
+
+        let (psi_rcr, psi_sdr) = protocol::setup(n_r, n_s, true, metric);
+
+        let (d, e, f) = protocol::run_standard_lp(psi_rcr, psi_sdr, data_r, data_s, metric as u32);
+
+        println!("msg1 {} msg2 {} times {}", d, e, f);
+
+        a = a + d;
+        b = b + e;
+        c = c + f;
+    }
+
+    println!(
+        "{} 字节 {} 字节 {} 微秒",
+        a / times,
+        b / times,
+        c / times as u128
+    );
+}
+
+fn sample_test_data_points(num: usize) -> Vec<Point> {
+    let mut rng = rand::thread_rng();
+    let mut points: Vec<Point> = Vec::with_capacity(num);
+    for _ in 0..num {
+        let mut point: Point = [0u64; DIM];
+        for i in 0..DIM {
+            point[i] = rng.gen_range(SIDE_LEN..=(1 << 31));
+        }
+        points.push(point);
+    }
+    return points;
 }

@@ -9,7 +9,7 @@ use crate::okvs;
 use fxhash::hash64;
 
 pub const DIM: usize = 2;
-pub const R: u64 = 20; // radius 半径
+pub const R: u64 = 30; // radius 半径
 pub const SIDE_LEN: u64 = 2 * R; // 边长，直径
 pub const BLK_CELLS: usize = 1 << DIM; //2^DIM
 pub const R_L2: u64 = R * R;
@@ -66,19 +66,6 @@ fn l1_dist(p1: &Point, p2: &Point) -> u64 {
     return sum;
 }
 
-// 计算给定点 p 相对于源点 source 的位置索引
-#[inline]
-fn get_position(p: &Point, source: &Point) -> usize {
-    let mut pos: usize = 0;
-    for i in 0..DIM {
-        // 如果 p 的某一维度大于 source 的对应维度，则更新位置索引
-        if p[i] > source[i] {
-            pos += 1 << i;
-        }
-    }
-    return pos;
-}
-
 // 计算两个点之间的无穷范数（切比雪夫距离）
 #[inline]
 fn l_inf_dist(p1: &Point, p2: &Point) -> u64 {
@@ -92,19 +79,32 @@ fn l_inf_dist(p1: &Point, p2: &Point) -> u64 {
     return max_diff; // 返回无穷范数
 }
 
+// 计算给定点 p 相对于源点 source 的位置索引
+#[inline]
+fn get_position(p: &Point, source: &Point) -> usize {
+    let mut pos: usize = 0;
+    for i in 0..DIM {
+        // 如果 p 的某一维度大于 source 的对应维度，则更新位置索引
+        if p[i] > source[i] {
+            pos += 1 << i;
+        }
+    }
+    return pos;
+}
+
 #[inline]
 fn intersection(p: &Point, metric: u32) -> Vec<Point> {
     // 检查维度是否为2
-    if DIM != 2 {
-        panic!("DIM should be 2");
-    }
+    // if DIM != 2 {
+    //     panic!("DIM should be 2");
+    // }
     // 初始化结果向量，容量为 BLK_CELLS
     let mut result: Vec<Point> = Vec::with_capacity(BLK_CELLS);
     // 计算给定点 p 所在块的左下角坐标
     let blk = block(p, SIDE_LEN, R);
     // 初始化交叉点
     let mut cross_point: Point = [0u64; DIM];
-    // 计算交叉点的坐标
+    // 计算交叉点的坐标, 交叉点是2*sigma的单元格的右上角的点
     for j in 0..DIM {
         cross_point[j] = blk[j] * SIDE_LEN + SIDE_LEN;
     }
@@ -119,6 +119,7 @@ fn intersection(p: &Point, metric: u32) -> Vec<Point> {
     }
     // 获取交叉点相对于源点 p 的位置索引
     let pos_ind = get_position(&cross_point, p);
+
     // 遍历所有块
     for i in 0..BLK_CELLS {
         let mut tem: Point = [0u64; DIM];
@@ -234,7 +235,7 @@ impl Receiver {
                 .iter()
                 .zip(self._pre_data[i].windows(self.window).step_by(self.window))
             {
-                let blk: [u64; 2] = block(pt, SIDE_LEN, R); // 计算块
+                let blk = block(pt, SIDE_LEN, R); // 计算块
                 let key: u64 = hash64(&blk); // 计算块的哈希值
                                              // 遍历 [2R+1] 范围内的每个值
                 let min: u64 = pt[i] - R as u64;
@@ -306,6 +307,7 @@ impl Receiver {
             {
                 // 遍历 [2R+1] * BLK_CELLS 范围内的每个值
                 let cels = intersection(pt, metric); // 获取交叉点
+                                                     // BLK_CELLS*possible_vals*n
                 for k in 0..BLK_CELLS {
                     let key;
                     if k >= cels.len() {
@@ -316,7 +318,7 @@ impl Receiver {
                     let min = pt[i] - R as u64;
                     for j in 0..possible_vals {
                         let key_ij = hash64(&(min + j as u64)); // 计算每个点的哈希值
-                        let tem = pre_window[k * possible_vals + j];
+                        let tem: (Scalar, Scalar) = pre_window[k * possible_vals + j];
                         let mut diff_abs = if j as u64 > R {
                             j as u64 - R
                         } else {
@@ -494,7 +496,7 @@ impl Sender {
         let mut uv: okvs::Encoding =
             vec![(RistrettoPoint::identity(), RistrettoPoint::identity()); BLK_CELLS]; // 初始化结果编码
         let mut tem: okvs::PointPair; // 临时变量
-        let cel: [u64; 2] = cell(pt, SIDE_LEN); // 计算块的左下角坐标
+        let cel = cell(pt, SIDE_LEN); // 计算块的左下角坐标
 
         // 遍历每个可能的块
         // 因为在recv计算用的是对应Point的block, sender则不知道，到底是哪个block
@@ -537,7 +539,7 @@ impl Sender {
         let coins = &self._coins[index]; // 获取当前coin
         let mut uv: okvs::PointPair = (RistrettoPoint::identity(), RistrettoPoint::identity()); // 初始化结果
         let mut tem: okvs::PointPair; // 临时变量
-        let cel: [u64; 2] = cell(pt, SIDE_LEN); // 计算块的左下角坐标
+        let cel = cell(pt, SIDE_LEN); // 计算块的左下角坐标
         let key = hash64(&cel); // 计算块的哈希值
                                 // 遍历每个维度
         for j in 0..DIM {
