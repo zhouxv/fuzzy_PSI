@@ -75,7 +75,7 @@ pub fn run_standard_apart(
 
     let msg_rec_len = len_rx.recv().expect("Failed to receive length");
 
-    (msg1_com_len, msg_rec_len, end.as_micros())
+    (msg1_com_len, msg_rec_len, end.as_millis())
 }
 
 // 标准 LP 运行函数
@@ -135,7 +135,7 @@ pub fn run_standard_lp(
 
     let msg_rec_len = len_rx.recv().expect("Failed to receive length");
 
-    (msg1_com_len, msg_rec_len, end.as_micros())
+    (msg1_com_len, msg_rec_len, end.as_millis())
 }
 
 #[cfg(test)]

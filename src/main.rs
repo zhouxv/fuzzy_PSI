@@ -11,12 +11,13 @@ fn main() {
     println!("程序名称+参数: {:?}", args);
 
     let pro_type = args[1].parse::<usize>().unwrap_or(0);
-    let times = args[2].parse::<usize>().unwrap_or(50);
+    let times = args[2].parse::<usize>().unwrap_or(5);
+    let pt_nums = args[3].parse::<usize>().unwrap_or(256);
 
     match pro_type {
         0 => {
             // 低维协议
-            test_all_low(times);
+            test_all_low(times, pt_nums);
         }
         1 => {
             // 1 vs 1
@@ -122,7 +123,7 @@ pub fn fuzzy_macthing_infinity(setting: bool) -> (usize, usize, u128) {
 
     print!("res: {:?} ", res);
 
-    (msg1_com.len(), msg_com.len(), end.as_micros())
+    (msg1_com.len(), msg_com.len(), end.as_millis())
 }
 
 pub fn fuzzy_macthing_lp(metric: usize, setting: bool) -> (usize, usize, u128) {
@@ -155,28 +156,16 @@ pub fn fuzzy_macthing_lp(metric: usize, setting: bool) -> (usize, usize, u128) {
     (msg1_com.len(), msg_com.len(), end.as_micros())
 }
 
-pub fn test_all_low(times: usize) {
-    lin_low(2048, 1048576, times);
+pub fn test_all_low(times: usize, pt_nums: usize) {
+    // lin_low(pt_nums, pt_nums, times);
 
     // println!("---------------------------------------");
 
-    // lp_low(16, 16, 1, times);
+    // lp_low(pt_nums, pt_nums, 1, times);
 
-    // println!("---------------------------------------");
+    println!("---------------------------------------");
 
-    // lp_low(16, 16, 2, times);
-
-    // println!("---------------------------------------");
-
-    // lin_low(256, 256, times);
-
-    // println!("---------------------------------------");
-
-    // lp_low(256, 256, 1, times);
-
-    // println!("---------------------------------------");
-
-    // lp_low(256, 256, 2, times);
+    lp_low(pt_nums, pt_nums, 2, times);
 }
 
 fn lin_low(n_r: usize, n_s: usize, times: usize) {
@@ -206,7 +195,7 @@ fn lin_low(n_r: usize, n_s: usize, times: usize) {
     }
 
     println!(
-        "{} 字节 {} 字节 {} 微秒",
+        "{} 字节 {} 字节 {} 毫秒",
         a / times,
         b / times,
         c / times as u128
@@ -244,7 +233,7 @@ fn lp_low(n_r: usize, n_s: usize, metric: usize, times: usize) {
     }
 
     println!(
-        "{} 字节 {} 字节 {} 微秒",
+        "{} 字节 {} 字节 {} 毫秒",
         a / times,
         b / times,
         c / times as u128

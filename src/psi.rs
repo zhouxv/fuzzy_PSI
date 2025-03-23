@@ -9,7 +9,7 @@ use crate::okvs;
 use fxhash::hash64;
 
 pub const DIM: usize = 2;
-pub const R: u64 = 30; // radius 半径
+pub const R: u64 = 256; // radius 半径
 pub const SIDE_LEN: u64 = 2 * R; // 边长，直径
 pub const BLK_CELLS: usize = 1 << DIM; //2^DIM
 pub const R_L2: u64 = R * R;
