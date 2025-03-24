@@ -157,11 +157,11 @@ pub fn fuzzy_macthing_lp(metric: usize, setting: bool) -> (usize, usize, u128) {
 }
 
 pub fn test_all_low(times: usize, pt_nums: usize) {
-    // lin_low(pt_nums, pt_nums, times);
+    lin_low(pt_nums, pt_nums, times);
 
-    // println!("---------------------------------------");
+    println!("---------------------------------------");
 
-    // lp_low(pt_nums, pt_nums, 1, times);
+    lp_low(pt_nums, pt_nums, 1, times);
 
     println!("---------------------------------------");
 
@@ -194,11 +194,14 @@ fn lin_low(n_r: usize, n_s: usize, times: usize) {
         c = c + f;
     }
 
+    let avg_a = a / times;
+    let avg_b = b / times;
+    let avg_c = c / times as u128;
+    let avg_com = (avg_a + avg_b) as f64 / 1024.0 / 1024.0;
+
     println!(
-        "{} 字节 {} 字节 {} 毫秒",
-        a / times,
-        b / times,
-        c / times as u128
+        "{} 字节 {} 字节 {} 毫秒 {} MB",
+        avg_a, avg_b, avg_c, avg_com
     );
 }
 
@@ -232,11 +235,14 @@ fn lp_low(n_r: usize, n_s: usize, metric: usize, times: usize) {
         c = c + f;
     }
 
+    let avg_a = a / times;
+    let avg_b = b / times;
+    let avg_c = c / times as u128;
+    let avg_com = (avg_a + avg_b) as f64 / 1024.0 / 1024.0;
+
     println!(
-        "{} 字节 {} 字节 {} 毫秒",
-        a / times,
-        b / times,
-        c / times as u128
+        "{} 字节 {} 字节 {} 毫秒 {} MB",
+        avg_a, avg_b, avg_c, avg_com
     );
 }
 
